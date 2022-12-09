@@ -2,7 +2,7 @@
 from typing import cast
 
 
-INTEGER, PLUS, EOF = "INTEGER", "PLUS", "EOF"
+INTEGER, PLUS, MINUS, EOF = "INTEGER", "PLUS", "MINUS", "EOF"
 
 
 class Token(object):
@@ -33,12 +33,30 @@ class Interpretor(object):
         self.pos: int = 0
         # Current token instance
         self.current_token: Token | None = None
+        self.current_char: str | None = self.text[self.pos]
 
     def error(self) -> None:
         raise Exception("Error paarsing input")
 
-    def __is_end_of_file(self) -> bool:
-        return self.pos >= len(self.text)
+    def advance(self):
+        """Advance the 'pos' pointer and set the 'current_char' variable."""
+        self.pos += 1
+        if self.pos > len(self.text) - 1:
+            self.current_char = None
+        else:
+            self.current_char = self.text[self.pos]
+
+    def skip_whitespace(self):
+        while self.current_char is not None and self.current_char.isspace():
+            self.advance()
+
+    def integer(self):
+        """Return a (multidigit) integer consumed from the input."""
+        result = ""
+        while self.current_char is not None and self.current_char.isdigit():
+            result += self.current_char
+            self.advance()
+        return int(result)
 
     def get_next_token(self) -> Token | None:
         """Lexical analyzer/tokenizer
@@ -46,26 +64,24 @@ class Interpretor(object):
         This method is responsible for breaking a asentence
         apart into tokens. One token at a time.
         """
-        text = self.text
+        while self.current_char is not None:
+            if self.current_char.isspace():
+                self.skip_whitespace()
+                continue
 
-        # End of the file?
-        if self.__is_end_of_file():
-            return Token(EOF, None)
+            if self.current_char.isdigit():
+                return Token(INTEGER, self.integer())
 
-        current_char = text[self.pos]
+            if self.current_char == "+":
+                self.advance()
+                return Token(PLUS, "+")
 
-        if current_char.isdigit():
-            token = Token(INTEGER, int(current_char))
-            self.pos += 1
-            return token
+            if self.current_char == "-":
+                self.advance()
+                return Token(MINUS, "-")
 
-        if current_char == "+":
-            token = Token(PLUS, current_char)
-            self.pos += 1
-            return token
-
-        self.error()
-        return None
+            self.error()
+        return Token(EOF, None)
 
     def eat(self, token_type: str) -> None:
         # Compare the current token type with the passed token
@@ -77,7 +93,11 @@ class Interpretor(object):
             self.error()
 
     def expr(self) -> int:
-        """expr -> INTEGER PLUS INTEGER"""
+        """Parser/Interpreter
+
+        expr -> INTEGER PLUS INTEGER
+        expr -> INTEGER MINUS INTEGER
+        """
         # set the current token to the first token taken from the input
         self.current_token = self.get_next_token()
 
@@ -86,16 +106,25 @@ class Interpretor(object):
         assert left is not None
         self.eat(INTEGER)
 
-        # The next token should be a '+' token
-        self.eat(PLUS)
+        # The next token should be a '+' or '-' token
+        op = self.current_token
+        assert op is not None
+        if op.type == PLUS:
+            self.eat(PLUS)
+        else:
+            self.eat(MINUS)
 
         # The last token should be a single digit integer
         right = self.current_token
         assert right is not None
         self.eat(INTEGER)
 
-        result = cast(int, left.value) + cast(int, right.value)
-        return result
+        left_digit = cast(int, left.value)
+        right_digit = cast(int, right.value)
+        if op.type == PLUS:
+            return left_digit + right_digit
+        else:
+            return left_digit - right_digit
 
 
 def main():
